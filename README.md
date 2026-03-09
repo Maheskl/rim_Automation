@@ -66,8 +66,3 @@ Example payload:
 ```
 
 Include header `X-Webhook-Secret` if `WEBHOOK_SECRET` is set.
-
-## Notes
-
-- Do not commit secrets or tokens. Use environment variables.
-- Add a `.gitignore` to exclude `__pycache__/`, `*.pyc`, and local env files.
