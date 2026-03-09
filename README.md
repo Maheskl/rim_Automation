@@ -6,8 +6,7 @@ Generate Grafana snapshot links from Jira issues and optionally post them back a
 
 - `backend/app.py`: CLI to fetch Jira issue, compute Grafana URL, optionally post comment.
 - `backend/webhook_service.py`: FastAPI webhook that accepts Jira payloads and posts Grafana link comments.
-- `jira_test.sh`: Local test script (no secrets should be committed).
-- `plan.md`: Design and implementation notes.
+- `jira_test.sh`: Local test script.
 
 ## Requirements
 
