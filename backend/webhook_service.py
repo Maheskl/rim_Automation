@@ -6,16 +6,14 @@ from pydantic import BaseModel
 
 # import helper functions from app.py
 from app import (
-      extract_single_product_value,
-      normalize_jira_time,
-      iso_to_epoch_ms,
-      parse_product_context,
-      build_grafana_url,
-      jira_post_comment,
-      jira_get_issue,
-      extract_robot_num,
-      extract_platform,
-  )
+    extract_single_product_value,
+    normalize_jira_time,
+    iso_to_epoch_ms,
+    parse_product_context,
+    build_grafana_url,
+    jira_post_comment,
+    jira_get_issue,
+)
 
 
 logging.basicConfig(level=logging.INFO)
@@ -68,8 +66,6 @@ def process_issue(payload: WebhookPayload):
         from_ms = incident_ms - PRE_MS
         to_ms = incident_ms + POST_MS
 
-        robot = extract_robot_num(product)
-        platform = extract_platform(product)
         grafana_url = build_grafana_url(GRAFANA_HOST, GRAFANA_UID, GRAFANA_SLUG,
                                         from_ms, to_ms, platform, robot)
 

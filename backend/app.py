@@ -65,42 +65,22 @@ def extract_single_product_value(field: Any) -> Optional[str]:
 
 
 def parse_product_context(product_value: str) -> Optional[tuple[str, str]]:
-      """
-      Only supports these specific configurations:
-        Alpha 1.0 #<any_number> (Wheeled) -> ("alpha", "<robot_number>")
-        Alpha 1.1 #<any_number> (Biped)   -> ("alpha_biped", "<robot_number>")
+    """
+    Parse a single supported product selection and return (platform, robot).
+    Unsupported or ambiguous values return None.
+    """
+    match = re.fullmatch(
+        r"Alpha\s+\d+\.\d+\s+#(?P<robot>\d+)\s+\((?P<mode>Wheeled|Biped)\)",
+        product_value.strip(),
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
 
-      All other formats return None including:
-        - Any version other than 1.0 or 1.1
-        - Alpha 1.0 with Biped mode
-        - Alpha 1.1 with Wheeled mode
-        - Alpha 1.0 (Wheeled) - All
-        - Alpha 1.1 (Biped) - All
-        - Multi-select strings
-      """
-      s = product_value.strip()
-
-      # Only match Alpha 1.0 or 1.1 with any robot number
-      match = re.fullmatch(
-          r"Alpha\s+(?P<version>1\.[01])\s+#(?P<robot>\d+)\s+\((?P<mode>Wheeled|Biped)\)",
-          s,
-          flags=re.IGNORECASE,
-      )
-      if not match:
-          return None
-
-      version = match.group("version")
-      robot = match.group("robot")
-      mode = match.group("mode").lower()
-      
-      # Additional validation: only allow specific version-mode combinations
-      if version == "1.0" and mode != "wheeled":
-          return None
-      if version == "1.1" and mode != "biped":
-          return None
-
-      platform = "alpha_biped" if mode == "biped" else "alpha"
-      return platform, robot
+    robot = match.group("robot")
+    mode = match.group("mode").lower()
+    platform = "alpha_biped" if mode == "biped" else "alpha"
+    return platform, robot
 
 
 
@@ -272,16 +252,15 @@ def main():
     timing_raw = time_field if time_field else ""
 
     if not product_value:
-      logging.warning("Product field is empty or multi-select; skipping Grafana URL generation.")
-      return
+        logging.warning("Product field is empty or multi-select; skipping Grafana URL generation.")
+        return
 
     parsed = parse_product_context(product_value)
     if not parsed:
-      logging.warning("Unsupported product format %r; skipping Grafana URL generation.", product_value)
-      return
+        logging.warning("Unsupported product format %r; skipping Grafana URL generation.", product_value)
+        return
 
     platform, robot_num = parsed
-
 
     logging.info("Product: %s", product_value)
     logging.info("Timing raw: %s", timing_raw)
@@ -299,9 +278,6 @@ def main():
     from_ms = incident_ms - PRE_MS
     to_ms = incident_ms + POST_MS
 
-    robot_num = extract_robot_num(product_value)
-    platform = extract_platform(product_value)
-
     grafana_url = build_grafana_url(GRAFANA_HOST, GRAFANA_UID, GRAFANA_SLUG,
                                     from_ms, to_ms, platform, robot_num)
 
@@ -318,10 +294,17 @@ def main():
     print("--------------\n")
 
     if args.post:
-        comment = (f"RIM snapshot for product *{product_value}* (robot {robot_num}) at {timing_iso or 'unknown'}\n\n"
-                   f"Grafana: {grafana_url}")
         logging.info("Posting comment to Jira...")
-        res = jira_post_comment(JIRA_BASE, JIRA_USER, JIRA_TOKEN, ISSUE, comment)
+        res = jira_post_comment(
+            JIRA_BASE,
+            JIRA_USER,
+            JIRA_TOKEN,
+            ISSUE,
+            product_value,
+            robot_num,
+            timing_iso or "unknown",
+            grafana_url,
+        )
         logging.info("Posted comment id: %s", res.get("id"))
         print("Posted comment to Jira.")
 
