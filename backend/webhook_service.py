@@ -4,17 +4,19 @@ import os, logging, threading
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-# Reuse functions from app.py
+# import helper functions from app.py
 from app import (
-    jira_get_issue,
-    extract_field_value,
-    normalize_jira_time,
-    iso_to_epoch_ms,
-    extract_robot_num,
-    extract_platform,
-    build_grafana_url,
-    jira_post_comment,
-)
+      extract_single_product_value,
+      normalize_jira_time,
+      iso_to_epoch_ms,
+      parse_product_context,
+      build_grafana_url,
+      jira_post_comment,
+      jira_get_issue,
+      extract_robot_num,
+      extract_platform,
+  )
+
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
@@ -47,8 +49,19 @@ def process_issue(payload: WebhookPayload):
         else:
             issue_json = jira_get_issue(JIRA_BASE, JIRA_USER, JIRA_TOKEN, issue)
             fields = issue_json.get("fields", {})
-            product = extract_field_value(fields.get(PRODUCT_FIELD_ID))
+            product = extract_single_product_value(fields.get(PRODUCT_FIELD_ID))
             timing_raw = fields.get(TIME_FIELD_ID) or ""
+
+        if not product:
+            logging.info("Skipping %s: product field is empty or multi-select", issue)
+            return
+
+        parsed = parse_product_context(product)
+        if not parsed:
+            logging.info("Skipping %s: unsupported product value %r", issue, product)
+            return
+
+        platform, robot = parsed
 
         timing_iso = normalize_jira_time(timing_raw) or ""
         incident_ms = iso_to_epoch_ms(timing_iso) if timing_iso else int(__import__("time").time()*1000)
