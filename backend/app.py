@@ -21,6 +21,8 @@ import logging
 from typing import Any, Optional
 from urllib.parse import quote_plus
 import requests
+from typing import Any, Optional
+
 
 # Optional dependency; used for robust ISO parsing
 try:
@@ -36,27 +38,71 @@ def getenv(name: str, default: Optional[str] = None) -> Optional[str]:
         return default
     return v
 
-
-def extract_field_value(field: Any) -> str:
+ 
+def extract_single_product_value(field: Any) -> Optional[str]:
     """
-    Robustly return a string value for a Jira custom field which may be:
-     - None
-     - string
-     - dict {value, name, id}
-     - list [ {value|name|id}, ... ]
+    Return a single product string only when the Jira field contains exactly
+    one selection. Multi-select or empty values are ignored.
     """
     if field is None:
-        return ""
+        return None
+
     if isinstance(field, list):
-        if len(field) == 0:
-            return ""
-        item = field[0]
-        if isinstance(item, dict):
-            return item.get("value") or item.get("name") or str(item.get("id", ""))
-        return str(item)
+        if len(field) != 1:
+            return None
+        field = field[0]
+
     if isinstance(field, dict):
-        return field.get("value") or field.get("name") or str(field.get("id", ""))
-    return str(field)
+        value = field.get("value") or field.get("name")
+    else:
+        value = str(field)
+
+    if value is None:
+        return None
+
+    value = value.strip()
+    return value or None
+
+
+def parse_product_context(product_value: str) -> Optional[tuple[str, str]]:
+      """
+      Only supports these specific configurations:
+        Alpha 1.0 #<any_number> (Wheeled) -> ("alpha", "<robot_number>")
+        Alpha 1.1 #<any_number> (Biped)   -> ("alpha_biped", "<robot_number>")
+
+      All other formats return None including:
+        - Any version other than 1.0 or 1.1
+        - Alpha 1.0 with Biped mode
+        - Alpha 1.1 with Wheeled mode
+        - Alpha 1.0 (Wheeled) - All
+        - Alpha 1.1 (Biped) - All
+        - Multi-select strings
+      """
+      s = product_value.strip()
+
+      # Only match Alpha 1.0 or 1.1 with any robot number
+      match = re.fullmatch(
+          r"Alpha\s+(?P<version>1\.[01])\s+#(?P<robot>\d+)\s+\((?P<mode>Wheeled|Biped)\)",
+          s,
+          flags=re.IGNORECASE,
+      )
+      if not match:
+          return None
+
+      version = match.group("version")
+      robot = match.group("robot")
+      mode = match.group("mode").lower()
+      
+      # Additional validation: only allow specific version-mode combinations
+      if version == "1.0" and mode != "wheeled":
+          return None
+      if version == "1.1" and mode != "biped":
+          return None
+
+      platform = "alpha_biped" if mode == "biped" else "alpha"
+      return platform, robot
+
+
 
 
 def normalize_jira_time(raw: str) -> Optional[str]:
@@ -222,8 +268,20 @@ def main():
     product_field = fields.get(PRODUCT_FIELD_ID)
     time_field = fields.get(TIME_FIELD_ID)
 
-    product_value = extract_field_value(product_field)
+    product_value = extract_single_product_value(product_field)
     timing_raw = time_field if time_field else ""
+
+    if not product_value:
+      logging.warning("Product field is empty or multi-select; skipping Grafana URL generation.")
+      return
+
+    parsed = parse_product_context(product_value)
+    if not parsed:
+      logging.warning("Unsupported product format %r; skipping Grafana URL generation.", product_value)
+      return
+
+    platform, robot_num = parsed
+
 
     logging.info("Product: %s", product_value)
     logging.info("Timing raw: %s", timing_raw)
