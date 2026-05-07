@@ -14,10 +14,12 @@ from app import (
     jira_post_comment,
     jira_get_issue,
 )
+from slack_handler import slack_router
 
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
+app.include_router(slack_router)
 
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 JIRA_BASE = os.environ.get("JIRA_BASE")
