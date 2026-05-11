@@ -4,4 +4,5 @@ requests
 pydantic
 python-dateutil
 slack-sdk
-requests-toolbelt
+python-multipart
+python-dotenv
