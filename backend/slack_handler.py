@@ -18,7 +18,34 @@ SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
 JIRA_BASE = os.environ.get("JIRA_BASE", "")
 JIRA_USER = os.environ.get("JIRA_USER", "")
 JIRA_TOKEN = os.environ.get("JIRA_TOKEN", "")
-JIRA_DEFAULT_PROJECT = os.environ.get("JIRA_DEFAULT_PROJECT", "HA")
+JIRA_DEFAULT_PROJECT = os.environ.get("JIRA_DEFAULT_PROJECT") or "RIM"
+
+AFFECTED_PRODUCT_OPTIONS = [
+    ("11926", "Alpha 1.0 (Wheeled) - All"),
+    ("11927", "Alpha 1.0 #1 (Wheeled)"),
+    ("11928", "Alpha 1.0 #2 (Wheeled)"),
+    ("11929", "Alpha 1.0 #3 (Wheeled)"),
+    ("11930", "Alpha 1.0 #4 (Wheeled)"),
+    ("11931", "Alpha 1.0 #5 (Wheeled)"),
+    ("11932", "Alpha 1.0 #6 (Wheeled)"),
+    ("11933", "Alpha 1.0 #7 (Wheeled)"),
+    ("11934", "Alpha 1.0 #8 (Wheeled)"),
+    ("11935", "Alpha 1.0 #9 (Wheeled)"),
+    ("11936", "Alpha 1.0 #10 (Wheeled)"),
+    ("11937", "Alpha 1.0 #11 (Wheeled)"),
+    ("14052", "Alpha 1.0 #12 (Wheeled)"),
+    ("11938", "Alpha 1.1 (Biped) - All"),
+    ("11939", "Alpha 1.1 #1 (Biped)"),
+    ("11940", "Alpha 1.1 #2 (Biped)"),
+    ("11941", "Alpha 1.1 #3 (Biped)"),
+    ("11942", "Alpha 1.1 #4 (Biped)"),
+    ("11943", "Alpha 1.1 #5 (Biped)"),
+    ("11944", "Alpha 1.1 #6 (Biped)"),
+    ("12116", "Beta"),
+    ("11945", "Roadkill 2"),
+]
+
+PRIORITY_OPTIONS = ["Blocker", "Highest", "High", "Medium", "Low", "Lowest"]
 
 slack_router = APIRouter()
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
@@ -81,6 +108,7 @@ def _handle_shortcut(payload: dict):
     private_metadata = json.dumps({
         "channel_id": channel_id,
         "message_ts": message.get("ts", ""),
+        "thread_ts": message.get("thread_ts", ""),
         "slack_user_id": slack_user_id,
         "slack_permalink": _get_permalink(channel_id, message.get("ts", "")),
     })
@@ -110,12 +138,13 @@ def _handle_view_submission(payload: dict):
 
     if callback_id == "create_jira_modal":
         summary = state_values.get("summary_block", {}).get("summary_input", {}).get("value", "")
-        project = state_values.get("project_block", {}).get("project_input", {}).get("value", JIRA_DEFAULT_PROJECT)
-        issue_type = state_values.get("type_block", {}).get("type_select", {}).get("selected_option", {}).get("value", "Task")
+        reporter_slack_id = state_values.get("reporter_block", {}).get("reporter_select", {}).get("selected_user", "")
+        product_id = state_values.get("product_block", {}).get("product_select", {}).get("selected_option", {}).get("value", "")
+        priority = state_values.get("priority_block", {}).get("priority_select", {}).get("selected_option", {}).get("value", "Medium")
 
         threading.Thread(
             target=_worker_create_and_attach,
-            args=(summary, project, issue_type, private_metadata),
+            args=(summary, product_id, priority, reporter_slack_id, private_metadata),
             daemon=True,
         ).start()
 
@@ -130,17 +159,15 @@ def _handle_view_submission(payload: dict):
     return {"response_action": "clear"}
 
 
-def _worker_create_and_attach(summary: str, project: str, issue_type: str, meta: dict):
+def _worker_create_and_attach(summary: str, affected_product_id: str, priority: str, reporter_slack_id: str, meta: dict):
     channel_id = meta["channel_id"]
     message_ts = meta["message_ts"]
-    slack_user_id = meta["slack_user_id"]
+    slack_user_id = reporter_slack_id or meta["slack_user_id"]
     slack_permalink = meta.get("slack_permalink", "")
 
     try:
-        resp = slack_client.conversations_history(
-            channel=channel_id, latest=message_ts, limit=1, inclusive=True
-        )
-        message = resp["messages"][0] if resp.get("messages") else {}
+        thread_ts = meta.get("thread_ts", "")
+        message = _get_clicked_message(channel_id, message_ts, thread_ts)
         files = collect_files(message)
 
         reporter_id = resolve_reporter(
@@ -152,8 +179,8 @@ def _worker_create_and_attach(summary: str, project: str, issue_type: str, meta:
             summary=summary,
             slack_permalink=slack_permalink,
             reporter_account_id=reporter_id,
-            project_key=project,
-            issue_type=issue_type,
+            affected_product_id=affected_product_id,
+            priority_name=priority,
         )
 
         result = attach_to_jira(
@@ -176,7 +203,7 @@ def _worker_create_and_attach(summary: str, project: str, issue_type: str, meta:
             msg += f", {n_failed} failed"
 
         slack_client.chat_postMessage(channel=channel_id, thread_ts=message_ts, text=msg)
-        slack_client.reactions_add(channel=channel_id, timestamp=message_ts, name="white_check_mark")
+        _safe_react(channel_id, message_ts)
 
         if result["skipped"]:
             _post_skipped_links_comment(issue_key, result["skipped"])
@@ -196,10 +223,8 @@ def _worker_attach_only(issue_key: str, meta: dict):
     message_ts = meta["message_ts"]
 
     try:
-        resp = slack_client.conversations_history(
-            channel=channel_id, latest=message_ts, limit=1, inclusive=True
-        )
-        message = resp["messages"][0] if resp.get("messages") else {}
+        thread_ts = meta.get("thread_ts", "")
+        message = _get_clicked_message(channel_id, message_ts, thread_ts)
         files = collect_files(message)
 
         if not files:
@@ -223,7 +248,7 @@ def _worker_attach_only(issue_key: str, meta: dict):
             channel=channel_id, thread_ts=message_ts,
             text=f":white_check_mark: Attached {n} file(s) to <{jira_url}|{issue_key}>",
         )
-        slack_client.reactions_add(channel=channel_id, timestamp=message_ts, name="white_check_mark")
+        _safe_react(channel_id, message_ts)
 
         if result["failed"]:
             _post_failure_comment(issue_key, result["failed"])
@@ -237,11 +262,19 @@ def _worker_attach_only(issue_key: str, meta: dict):
 
 
 def _build_create_issue_modal(prefill_summary: str, private_metadata: str) -> dict:
+    product_options = [
+        {"text": {"type": "plain_text", "text": label}, "value": opt_id}
+        for opt_id, label in AFFECTED_PRODUCT_OPTIONS
+    ]
+    priority_options = [
+        {"text": {"type": "plain_text", "text": p}, "value": p}
+        for p in PRIORITY_OPTIONS
+    ]
     return {
         "type": "modal",
         "callback_id": "create_jira_modal",
         "private_metadata": private_metadata,
-        "title": {"type": "plain_text", "text": "Create Jira Issue"},
+        "title": {"type": "plain_text", "text": "Create RIM Issue"},
         "submit": {"type": "plain_text", "text": "Create"},
         "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": [
@@ -258,31 +291,38 @@ def _build_create_issue_modal(prefill_summary: str, private_metadata: str) -> di
             },
             {
                 "type": "input",
-                "block_id": "project_block",
-                "label": {"type": "plain_text", "text": "Project Key"},
+                "block_id": "reporter_block",
+                "label": {"type": "plain_text", "text": "Reporter"},
                 "element": {
-                    "type": "plain_text_input",
-                    "action_id": "project_input",
-                    "initial_value": JIRA_DEFAULT_PROJECT,
-                    "placeholder": {"type": "plain_text", "text": "e.g. HA"},
+                    "type": "users_select",
+                    "action_id": "reporter_select",
+                    "placeholder": {"type": "plain_text", "text": "Search for a person"},
                 },
             },
             {
                 "type": "input",
-                "block_id": "type_block",
-                "label": {"type": "plain_text", "text": "Issue Type"},
+                "block_id": "product_block",
+                "label": {"type": "plain_text", "text": "Affected Robot"},
                 "element": {
                     "type": "static_select",
-                    "action_id": "type_select",
+                    "action_id": "product_select",
+                    "placeholder": {"type": "plain_text", "text": "Pick a robot"},
+                    "options": product_options,
+                },
+            },
+            {
+                "type": "input",
+                "block_id": "priority_block",
+                "label": {"type": "plain_text", "text": "Priority"},
+                "optional": True,
+                "element": {
+                    "type": "static_select",
+                    "action_id": "priority_select",
                     "initial_option": {
-                        "text": {"type": "plain_text", "text": "Task"},
-                        "value": "Task",
+                        "text": {"type": "plain_text", "text": "Medium"},
+                        "value": "Medium",
                     },
-                    "options": [
-                        {"text": {"type": "plain_text", "text": "Task"}, "value": "Task"},
-                        {"text": {"type": "plain_text", "text": "Bug"}, "value": "Bug"},
-                        {"text": {"type": "plain_text", "text": "Incident"}, "value": "Incident"},
-                    ],
+                    "options": priority_options,
                 },
             },
         ],
@@ -318,6 +358,28 @@ def _get_permalink(channel_id: str, message_ts: str) -> str:
         return resp.get("permalink", "")
     except SlackApiError:
         return ""
+
+
+def _safe_react(channel_id: str, message_ts: str, name: str = "white_check_mark"):
+    try:
+        slack_client.reactions_add(channel=channel_id, timestamp=message_ts, name=name)
+    except SlackApiError as e:
+        if e.response.get("error") != "already_reacted":
+            logging.warning("reactions.add failed: %s", e.response.get("error"))
+
+
+def _get_clicked_message(channel_id: str, message_ts: str, thread_ts: str) -> dict:
+    """Fetch the exact message the user clicked, whether top-level or a thread reply."""
+    if thread_ts and thread_ts != message_ts:
+        resp = slack_client.conversations_replies(channel=channel_id, ts=thread_ts)
+    else:
+        resp = slack_client.conversations_history(
+            channel=channel_id, latest=message_ts, limit=1, inclusive=True,
+        )
+    for msg in resp.get("messages", []):
+        if msg.get("ts") == message_ts:
+            return msg
+    return {}
 
 
 def _post_failure_comment(issue_key: str, failed: list[dict]):

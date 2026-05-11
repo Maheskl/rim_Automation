@@ -2,7 +2,6 @@ import os
 import time
 import logging
 import requests
-from requests_toolbelt import MultipartEncoder
 
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
 JIRA_BASE = os.environ.get("JIRA_BASE", "")
@@ -86,27 +85,23 @@ def _stream_file_to_jira(
 ):
     upload_url = f"{jira_base}/rest/api/3/issue/{issue_key}/attachments"
 
-    # X-Atlassian-Token: no-check bypasses Jira's CSRF check for attachment uploads
-    jira_headers = {"X-Atlassian-Token": "no-check"}
-
-    with requests.get(
+    dl = requests.get(
         download_url,
         headers={"Authorization": f"Bearer {slack_token}"},
-        stream=True,
-        timeout=30,
-    ) as slack_resp:
-        slack_resp.raise_for_status()
-        slack_resp.raw.decode_content = True
+        timeout=60,
+    )
+    dl.raise_for_status()
+    file_bytes = dl.content
 
-        encoder = MultipartEncoder(
-            fields={"file": (name, slack_resp.raw, mimetype)}
-        )
+    if not file_bytes:
+        raise RuntimeError(f"Slack returned 0 bytes for {name} — check token/scopes")
 
-        upload_resp = requests.post(
-            upload_url,
-            data=encoder,
-            headers={**jira_headers, "Content-Type": encoder.content_type},
-            auth=jira_auth,
-            timeout=300,
-        )
-        upload_resp.raise_for_status()
+    # X-Atlassian-Token: no-check bypasses Jira's CSRF check for attachment uploads
+    upload_resp = requests.post(
+        upload_url,
+        files={"file": (name, file_bytes, mimetype)},
+        headers={"X-Atlassian-Token": "no-check"},
+        auth=jira_auth,
+        timeout=300,
+    )
+    upload_resp.raise_for_status()
