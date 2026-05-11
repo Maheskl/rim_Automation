@@ -81,6 +81,7 @@ def _handle_shortcut(payload: dict):
     private_metadata = json.dumps({
         "channel_id": channel_id,
         "message_ts": message.get("ts", ""),
+        "thread_ts": message.get("thread_ts", ""),
         "slack_user_id": slack_user_id,
         "slack_permalink": _get_permalink(channel_id, message.get("ts", "")),
     })
@@ -137,10 +138,8 @@ def _worker_create_and_attach(summary: str, project: str, issue_type: str, meta:
     slack_permalink = meta.get("slack_permalink", "")
 
     try:
-        resp = slack_client.conversations_history(
-            channel=channel_id, latest=message_ts, limit=1, inclusive=True
-        )
-        message = resp["messages"][0] if resp.get("messages") else {}
+        thread_ts = meta.get("thread_ts", "")
+        message = _get_clicked_message(channel_id, message_ts, thread_ts)
         files = collect_files(message)
 
         reporter_id = resolve_reporter(
@@ -196,10 +195,8 @@ def _worker_attach_only(issue_key: str, meta: dict):
     message_ts = meta["message_ts"]
 
     try:
-        resp = slack_client.conversations_history(
-            channel=channel_id, latest=message_ts, limit=1, inclusive=True
-        )
-        message = resp["messages"][0] if resp.get("messages") else {}
+        thread_ts = meta.get("thread_ts", "")
+        message = _get_clicked_message(channel_id, message_ts, thread_ts)
         files = collect_files(message)
 
         if not files:
@@ -326,6 +323,20 @@ def _safe_react(channel_id: str, message_ts: str, name: str = "white_check_mark"
     except SlackApiError as e:
         if e.response.get("error") != "already_reacted":
             logging.warning("reactions.add failed: %s", e.response.get("error"))
+
+
+def _get_clicked_message(channel_id: str, message_ts: str, thread_ts: str) -> dict:
+    """Fetch the exact message the user clicked, whether top-level or a thread reply."""
+    if thread_ts and thread_ts != message_ts:
+        resp = slack_client.conversations_replies(channel=channel_id, ts=thread_ts)
+    else:
+        resp = slack_client.conversations_history(
+            channel=channel_id, latest=message_ts, limit=1, inclusive=True,
+        )
+    for msg in resp.get("messages", []):
+        if msg.get("ts") == message_ts:
+            return msg
+    return {}
 
 
 def _post_failure_comment(issue_key: str, failed: list[dict]):
