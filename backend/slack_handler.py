@@ -18,7 +18,7 @@ SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
 JIRA_BASE = os.environ.get("JIRA_BASE", "")
 JIRA_USER = os.environ.get("JIRA_USER", "")
 JIRA_TOKEN = os.environ.get("JIRA_TOKEN", "")
-JIRA_DEFAULT_PROJECT = os.environ.get("JIRA_DEFAULT_PROJECT", "RIM")
+JIRA_DEFAULT_PROJECT = os.environ.get("JIRA_DEFAULT_PROJECT") or "RIM"
 
 AFFECTED_PRODUCT_OPTIONS = [
     ("11926", "Alpha 1.0 (Wheeled) - All"),

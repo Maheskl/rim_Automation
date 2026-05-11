@@ -5,8 +5,8 @@ import requests
 JIRA_BASE = os.environ.get("JIRA_BASE", "").rstrip("/")
 JIRA_USER = os.environ.get("JIRA_USER", "")
 JIRA_TOKEN = os.environ.get("JIRA_TOKEN", "")
-JIRA_DEFAULT_PROJECT = os.environ.get("JIRA_DEFAULT_PROJECT", "RIM")
-JIRA_DEFAULT_ISSUE_TYPE = os.environ.get("JIRA_DEFAULT_ISSUE_TYPE", "Robot Issue")
+JIRA_DEFAULT_PROJECT = os.environ.get("JIRA_DEFAULT_PROJECT") or "RIM"
+JIRA_DEFAULT_ISSUE_TYPE = os.environ.get("JIRA_DEFAULT_ISSUE_TYPE") or "Robot Issue"
 JIRA_FALLBACK_ACCOUNT_ID = os.environ.get("JIRA_FALLBACK_ACCOUNT_ID", "")
 AFFECTED_PRODUCT_FIELD_ID = os.environ.get("PRODUCT_FIELD_ID", "customfield_11675")
 
