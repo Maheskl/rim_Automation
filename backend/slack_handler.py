@@ -293,11 +293,10 @@ def _build_create_issue_modal(prefill_summary: str, private_metadata: str) -> di
                 "type": "input",
                 "block_id": "reporter_block",
                 "label": {"type": "plain_text", "text": "Reporter"},
-                "optional": True,
                 "element": {
                     "type": "users_select",
                     "action_id": "reporter_select",
-                    "placeholder": {"type": "plain_text", "text": "Search for a person (defaults to you)"},
+                    "placeholder": {"type": "plain_text", "text": "Search for a person"},
                 },
             },
             {
