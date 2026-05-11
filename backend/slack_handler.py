@@ -45,7 +45,7 @@ AFFECTED_PRODUCT_OPTIONS = [
     ("11945", "Roadkill 2"),
 ]
 
-PRIORITY_OPTIONS = ["Blocker", "Critical", "High", "Medium", "Low"]
+PRIORITY_OPTIONS = ["Blocker", "Highest", "High", "Medium", "Low", "Lowest"]
 
 slack_router = APIRouter()
 slack_client = WebClient(token=SLACK_BOT_TOKEN)

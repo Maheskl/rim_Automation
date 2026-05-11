@@ -134,7 +134,13 @@ def create_issue(
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         timeout=30,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        try:
+            detail = resp.json()
+        except Exception:
+            detail = resp.text
+        logging.error("Jira create-issue %d: %s — payload was: %s", resp.status_code, detail, payload)
+        raise RuntimeError(f"Jira {resp.status_code}: {detail}")
     issue_key = resp.json()["key"]
     logging.info("Created Jira issue %s", issue_key)
     return issue_key
