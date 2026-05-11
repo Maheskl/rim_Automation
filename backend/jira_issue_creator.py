@@ -5,9 +5,10 @@ import requests
 JIRA_BASE = os.environ.get("JIRA_BASE", "").rstrip("/")
 JIRA_USER = os.environ.get("JIRA_USER", "")
 JIRA_TOKEN = os.environ.get("JIRA_TOKEN", "")
-JIRA_DEFAULT_PROJECT = os.environ.get("JIRA_DEFAULT_PROJECT", "HA")
-JIRA_DEFAULT_ISSUE_TYPE = os.environ.get("JIRA_DEFAULT_ISSUE_TYPE", "Task")
+JIRA_DEFAULT_PROJECT = os.environ.get("JIRA_DEFAULT_PROJECT", "RIM")
+JIRA_DEFAULT_ISSUE_TYPE = os.environ.get("JIRA_DEFAULT_ISSUE_TYPE", "Robot Issue")
 JIRA_FALLBACK_ACCOUNT_ID = os.environ.get("JIRA_FALLBACK_ACCOUNT_ID", "")
+AFFECTED_PRODUCT_FIELD_ID = os.environ.get("PRODUCT_FIELD_ID", "customfield_11675")
 
 
 def get_slack_user_email(user_id: str, slack_client) -> str | None:
@@ -73,13 +74,15 @@ def create_issue(
     summary: str,
     slack_permalink: str,
     reporter_account_id: str,
+    affected_product_id: str | None = None,
+    priority_name: str | None = None,
     project_key: str | None = None,
     issue_type: str | None = None,
     extra_description: str | None = None,
     jira_base: str | None = None,
     jira_auth: tuple | None = None,
 ) -> str:
-    """Returns the new issue key (e.g. 'HA-1234')."""
+    """Returns the new issue key (e.g. 'RIM-1234')."""
     jira_base = (jira_base or JIRA_BASE).rstrip("/")
     jira_auth = jira_auth or (JIRA_USER, JIRA_TOKEN)
     project_key = project_key or JIRA_DEFAULT_PROJECT
@@ -105,19 +108,23 @@ def create_issue(
             "content": [{"type": "text", "text": extra_description}],
         })
 
-    payload = {
-        "fields": {
-            "project": {"key": project_key},
-            "summary": summary,
-            "issuetype": {"name": issue_type},
-            "reporter": {"id": reporter_account_id},
-            "description": {
-                "type": "doc",
-                "version": 1,
-                "content": description_content,
-            },
-        }
+    fields = {
+        "project": {"key": project_key},
+        "summary": summary,
+        "issuetype": {"name": issue_type},
+        "reporter": {"id": reporter_account_id},
+        "description": {
+            "type": "doc",
+            "version": 1,
+            "content": description_content,
+        },
     }
+    if affected_product_id:
+        fields[AFFECTED_PRODUCT_FIELD_ID] = [{"id": affected_product_id}]
+    if priority_name:
+        fields["priority"] = {"name": priority_name}
+
+    payload = {"fields": fields}
 
     url = f"{jira_base}/rest/api/3/issue"
     resp = requests.post(
