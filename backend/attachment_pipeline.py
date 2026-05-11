@@ -96,6 +96,7 @@ def _stream_file_to_jira(
         timeout=30,
     ) as slack_resp:
         slack_resp.raise_for_status()
+        slack_resp.raw.decode_content = True
 
         encoder = MultipartEncoder(
             fields={"file": (name, slack_resp.raw, mimetype)}
