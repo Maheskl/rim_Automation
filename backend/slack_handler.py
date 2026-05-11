@@ -138,12 +138,13 @@ def _handle_view_submission(payload: dict):
 
     if callback_id == "create_jira_modal":
         summary = state_values.get("summary_block", {}).get("summary_input", {}).get("value", "")
+        reporter_slack_id = state_values.get("reporter_block", {}).get("reporter_select", {}).get("selected_user", "")
         product_id = state_values.get("product_block", {}).get("product_select", {}).get("selected_option", {}).get("value", "")
         priority = state_values.get("priority_block", {}).get("priority_select", {}).get("selected_option", {}).get("value", "Medium")
 
         threading.Thread(
             target=_worker_create_and_attach,
-            args=(summary, product_id, priority, private_metadata),
+            args=(summary, product_id, priority, reporter_slack_id, private_metadata),
             daemon=True,
         ).start()
 
@@ -158,10 +159,10 @@ def _handle_view_submission(payload: dict):
     return {"response_action": "clear"}
 
 
-def _worker_create_and_attach(summary: str, affected_product_id: str, priority: str, meta: dict):
+def _worker_create_and_attach(summary: str, affected_product_id: str, priority: str, reporter_slack_id: str, meta: dict):
     channel_id = meta["channel_id"]
     message_ts = meta["message_ts"]
-    slack_user_id = meta["slack_user_id"]
+    slack_user_id = reporter_slack_id or meta["slack_user_id"]
     slack_permalink = meta.get("slack_permalink", "")
 
     try:
@@ -286,6 +287,17 @@ def _build_create_issue_modal(prefill_summary: str, private_metadata: str) -> di
                     "action_id": "summary_input",
                     "initial_value": prefill_summary,
                     "placeholder": {"type": "plain_text", "text": "Brief description"},
+                },
+            },
+            {
+                "type": "input",
+                "block_id": "reporter_block",
+                "label": {"type": "plain_text", "text": "Reporter"},
+                "optional": True,
+                "element": {
+                    "type": "users_select",
+                    "action_id": "reporter_select",
+                    "placeholder": {"type": "plain_text", "text": "Search for a person (defaults to you)"},
                 },
             },
             {
