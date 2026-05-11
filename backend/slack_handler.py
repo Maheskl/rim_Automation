@@ -176,7 +176,7 @@ def _worker_create_and_attach(summary: str, project: str, issue_type: str, meta:
             msg += f", {n_failed} failed"
 
         slack_client.chat_postMessage(channel=channel_id, thread_ts=message_ts, text=msg)
-        slack_client.reactions_add(channel=channel_id, timestamp=message_ts, name="white_check_mark")
+        _safe_react(channel_id, message_ts)
 
         if result["skipped"]:
             _post_skipped_links_comment(issue_key, result["skipped"])
@@ -223,7 +223,7 @@ def _worker_attach_only(issue_key: str, meta: dict):
             channel=channel_id, thread_ts=message_ts,
             text=f":white_check_mark: Attached {n} file(s) to <{jira_url}|{issue_key}>",
         )
-        slack_client.reactions_add(channel=channel_id, timestamp=message_ts, name="white_check_mark")
+        _safe_react(channel_id, message_ts)
 
         if result["failed"]:
             _post_failure_comment(issue_key, result["failed"])
@@ -318,6 +318,14 @@ def _get_permalink(channel_id: str, message_ts: str) -> str:
         return resp.get("permalink", "")
     except SlackApiError:
         return ""
+
+
+def _safe_react(channel_id: str, message_ts: str, name: str = "white_check_mark"):
+    try:
+        slack_client.reactions_add(channel=channel_id, timestamp=message_ts, name=name)
+    except SlackApiError as e:
+        if e.response.get("error") != "already_reacted":
+            logging.warning("reactions.add failed: %s", e.response.get("error"))
 
 
 def _post_failure_comment(issue_key: str, failed: list[dict]):
