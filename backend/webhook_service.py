@@ -23,6 +23,7 @@ app.include_router(slack_router)
 
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 JIRA_BASE = os.environ.get("JIRA_BASE")
+JIRA_API_BASE = os.environ.get("JIRA_API_BASE") or JIRA_BASE
 JIRA_USER = os.environ.get("JIRA_USER")
 JIRA_TOKEN = os.environ.get("JIRA_TOKEN")
 PRODUCT_FIELD_ID = os.environ.get("PRODUCT_FIELD_ID", "customfield_11675")
@@ -47,7 +48,7 @@ def process_issue(payload: WebhookPayload):
             product = payload.affected_product
             timing_raw = payload.timing
         else:
-            issue_json = jira_get_issue(JIRA_BASE, JIRA_USER, JIRA_TOKEN, issue)
+            issue_json = jira_get_issue(JIRA_API_BASE, JIRA_USER, JIRA_TOKEN, issue)
             fields = issue_json.get("fields", {})
             product = extract_single_product_value(fields.get(PRODUCT_FIELD_ID))
             timing_raw = fields.get(TIME_FIELD_ID) or ""
@@ -72,13 +73,13 @@ def process_issue(payload: WebhookPayload):
                                         from_ms, to_ms, platform, robot)
 
         # post final comment (ADF)
-        jira_post_comment(JIRA_BASE, JIRA_USER, JIRA_TOKEN, issue, product, robot, timing_iso or str(incident_ms), grafana_url)
+        jira_post_comment(JIRA_API_BASE, JIRA_USER, JIRA_TOKEN, issue, product, robot, timing_iso or str(incident_ms), grafana_url)
         logging.info("Processed %s OK", issue)
     except Exception as e:
         logging.exception("Worker failed for %s: %s", issue, e)
         # post failure comment
         try:
-            jira_post_comment(JIRA_BASE, JIRA_USER, JIRA_TOKEN, issue,
+            jira_post_comment(JIRA_API_BASE, JIRA_USER, JIRA_TOKEN, issue,
                               product if 'product' in locals() else "(unknown)",
                               robot if 'robot' in locals() else "(unknown)",
                               timing_iso if 'timing_iso' in locals() else "(unknown)",

@@ -217,6 +217,7 @@ def main():
 
     # Load config from env
     JIRA_BASE = getenv("JIRA_BASE")
+    JIRA_API_BASE = getenv("JIRA_API_BASE") or JIRA_BASE
     JIRA_USER = getenv("JIRA_USER")
     JIRA_TOKEN = getenv("JIRA_TOKEN")
     ISSUE = args.issue
@@ -241,7 +242,7 @@ def main():
             sys.exit(2)
 
     logging.info("Fetching Jira issue %s...", ISSUE)
-    issue_json = jira_get_issue(JIRA_BASE, JIRA_USER, JIRA_TOKEN, ISSUE)
+    issue_json = jira_get_issue(JIRA_API_BASE, JIRA_USER, JIRA_TOKEN, ISSUE)
 
     # Extract product and timing
     fields = issue_json.get("fields", {})
@@ -296,7 +297,7 @@ def main():
     if args.post:
         logging.info("Posting comment to Jira...")
         res = jira_post_comment(
-            JIRA_BASE,
+            JIRA_API_BASE,
             JIRA_USER,
             JIRA_TOKEN,
             ISSUE,

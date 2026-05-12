@@ -15,7 +15,8 @@ from jira_issue_creator import create_issue, resolve_reporter
 
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
 SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
-JIRA_BASE = os.environ.get("JIRA_BASE", "")
+JIRA_BASE = os.environ.get("JIRA_BASE", "")     # used only for /browse/{key} links in Slack messages
+JIRA_API_BASE = os.environ.get("JIRA_API_BASE") or JIRA_BASE
 JIRA_USER = os.environ.get("JIRA_USER", "")
 JIRA_TOKEN = os.environ.get("JIRA_TOKEN", "")
 JIRA_DEFAULT_PROJECT = os.environ.get("JIRA_DEFAULT_PROJECT") or "RIM"
@@ -172,7 +173,7 @@ def _worker_create_and_attach(summary: str, affected_product_id: str, priority: 
 
         reporter_id = resolve_reporter(
             slack_user_id, slack_client,
-            jira_base=JIRA_BASE, jira_auth=(JIRA_USER, JIRA_TOKEN),
+            jira_base=JIRA_API_BASE, jira_auth=(JIRA_USER, JIRA_TOKEN),
         )
 
         issue_key = create_issue(
@@ -181,13 +182,14 @@ def _worker_create_and_attach(summary: str, affected_product_id: str, priority: 
             reporter_account_id=reporter_id,
             affected_product_id=affected_product_id,
             priority_name=priority,
+            jira_base=JIRA_API_BASE,
         )
 
         result = attach_to_jira(
             issue_key=issue_key,
             files=files,
             slack_token=SLACK_BOT_TOKEN,
-            jira_base=JIRA_BASE,
+            jira_base=JIRA_API_BASE,
             jira_auth=(JIRA_USER, JIRA_TOKEN),
         )
 
@@ -238,7 +240,7 @@ def _worker_attach_only(issue_key: str, meta: dict):
             issue_key=issue_key,
             files=files,
             slack_token=SLACK_BOT_TOKEN,
-            jira_base=JIRA_BASE,
+            jira_base=JIRA_API_BASE,
             jira_auth=(JIRA_USER, JIRA_TOKEN),
         )
 
@@ -393,7 +395,7 @@ def _post_skipped_links_comment(issue_key: str, skipped: list[dict]):
 
 
 def _post_jira_comment(issue_key: str, text: str):
-    url = f"{JIRA_BASE.rstrip('/')}/rest/api/3/issue/{issue_key}/comment"
+    url = f"{JIRA_API_BASE.rstrip('/')}/rest/api/3/issue/{issue_key}/comment"
     body = {
         "body": {
             "type": "doc", "version": 1,
