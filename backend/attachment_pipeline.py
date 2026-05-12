@@ -4,7 +4,7 @@ import logging
 import requests
 
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
-JIRA_BASE = os.environ.get("JIRA_BASE", "")
+JIRA_API_BASE = os.environ.get("JIRA_API_BASE") or os.environ.get("JIRA_BASE", "")
 JIRA_USER = os.environ.get("JIRA_USER", "")
 JIRA_TOKEN = os.environ.get("JIRA_TOKEN", "")
 
@@ -36,7 +36,7 @@ def attach_to_jira(
 ) -> dict:
     """Returns {"attached": [filenames], "skipped": [...], "failed": [...]}"""
     slack_token = slack_token or SLACK_BOT_TOKEN
-    jira_base = (jira_base or JIRA_BASE).rstrip("/")
+    jira_base = (jira_base or JIRA_API_BASE).rstrip("/")
     jira_auth = jira_auth or (JIRA_USER, JIRA_TOKEN)
 
     attached, skipped, failed = [], [], []

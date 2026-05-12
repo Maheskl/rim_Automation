@@ -2,7 +2,7 @@ import os
 import logging
 import requests
 
-JIRA_BASE = os.environ.get("JIRA_BASE", "").rstrip("/")
+JIRA_API_BASE = (os.environ.get("JIRA_API_BASE") or os.environ.get("JIRA_BASE", "")).rstrip("/")
 JIRA_USER = os.environ.get("JIRA_USER", "")
 JIRA_TOKEN = os.environ.get("JIRA_TOKEN", "")
 JIRA_DEFAULT_PROJECT = os.environ.get("JIRA_DEFAULT_PROJECT") or "RIM"
@@ -25,7 +25,7 @@ def find_jira_account_id(
     jira_base: str | None = None,
     jira_auth: tuple | None = None,
 ) -> str | None:
-    jira_base = (jira_base or JIRA_BASE).rstrip("/")
+    jira_base = (jira_base or JIRA_API_BASE).rstrip("/")
     jira_auth = jira_auth or (JIRA_USER, JIRA_TOKEN)
 
     url = f"{jira_base}/rest/api/3/user/search"
@@ -83,7 +83,7 @@ def create_issue(
     jira_auth: tuple | None = None,
 ) -> str:
     """Returns the new issue key (e.g. 'RIM-1234')."""
-    jira_base = (jira_base or JIRA_BASE).rstrip("/")
+    jira_base = (jira_base or JIRA_API_BASE).rstrip("/")
     jira_auth = jira_auth or (JIRA_USER, JIRA_TOKEN)
     project_key = project_key or JIRA_DEFAULT_PROJECT
     issue_type = issue_type or JIRA_DEFAULT_ISSUE_TYPE
