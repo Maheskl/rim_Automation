@@ -139,13 +139,14 @@ def _handle_view_submission(payload: dict):
 
     if callback_id == "create_jira_modal":
         summary = state_values.get("summary_block", {}).get("summary_input", {}).get("value", "")
+        description = state_values.get("description_block", {}).get("description_input", {}).get("value") or ""
         reporter_slack_id = state_values.get("reporter_block", {}).get("reporter_select", {}).get("selected_user", "")
         product_id = state_values.get("product_block", {}).get("product_select", {}).get("selected_option", {}).get("value", "")
         priority = state_values.get("priority_block", {}).get("priority_select", {}).get("selected_option", {}).get("value", "Medium")
 
         threading.Thread(
             target=_worker_create_and_attach,
-            args=(summary, product_id, priority, reporter_slack_id, private_metadata),
+            args=(summary, description, product_id, priority, reporter_slack_id, private_metadata),
             daemon=True,
         ).start()
 
@@ -160,7 +161,7 @@ def _handle_view_submission(payload: dict):
     return {"response_action": "clear"}
 
 
-def _worker_create_and_attach(summary: str, affected_product_id: str, priority: str, reporter_slack_id: str, meta: dict):
+def _worker_create_and_attach(summary: str, description: str, affected_product_id: str, priority: str, reporter_slack_id: str, meta: dict):
     channel_id = meta["channel_id"]
     message_ts = meta["message_ts"]
     slack_user_id = reporter_slack_id or meta["slack_user_id"]
@@ -182,6 +183,7 @@ def _worker_create_and_attach(summary: str, affected_product_id: str, priority: 
             reporter_account_id=reporter_id,
             affected_product_id=affected_product_id,
             priority_name=priority,
+            extra_description=description or None,
             jira_base=JIRA_API_BASE,
         )
 
@@ -289,6 +291,21 @@ def _build_create_issue_modal(prefill_summary: str, private_metadata: str) -> di
                     "action_id": "summary_input",
                     "initial_value": prefill_summary,
                     "placeholder": {"type": "plain_text", "text": "Brief description"},
+                },
+            },
+            {
+                "type": "input",
+                "block_id": "description_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Description"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "description_input",
+                    "multiline": True,
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "Optional — extra context, repro steps, etc.",
+                    },
                 },
             },
             {
